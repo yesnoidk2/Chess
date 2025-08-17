@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Customizable Chess</title>
+<style>
+  body { font-family: sans-serif; display:flex; flex-direction:column; align-items:center; margin:0; padding:0; }
+  header { text-align:center; margin:20px; }
+  #main { display:flex; }
+  #board { display:grid; grid-template-columns:repeat(8,60px); grid-template-rows:repeat(8,60px); margin-right:20px; }
+  .cell { width:60px; height:60px; display:flex; justify-content:center; align-items:center; font-size:36px; cursor:pointer; }
+  .white { background:#f0d9b5; }
+  .black { background:#b58863; }
+  #sidebar { min-width:150px; }
+  #status { margin-bottom:10px; }
+  #moves { margin-top:10px; max-height:400px; overflow-y:auto; }
+  .promoteBtn { margin:2px; padding:2px 5px; cursor:pointer; }
+  #customPage { display:none; margin-top:20px; }
+  label { display:block; margin:5px 0; }
+  input[type="color"] { width:60px; height:30px; padding:0; border:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Customizable Chess</h1>
+  <div>
+    <button onclick="showPage('gamePage')">Play</button>
+    <button onclick="showPage('customPage')">Customize</button>
+  </div>
+</header>
+
+<div id="gamePage">
+  <div id="main">
+    <div id="boardWrap">
+      <div id="board"></div>
+      <div style="margin-top:10px; text-align:center;">
+        <label>Time per player (minutes):
+          <input type="number" id="timeInput" value="5" min="1" style="width:50px;">
+        </label>
+        <button onclick="startTimer()">Start Timed Game</button>
+      </div>
+    </div>
+    <div id="sidebar">
+      <div id="status">White to move</div>
+      <div>White: <span id="whiteTimer">05:00</span></div>
+      <div>Black: <span id="blackTimer">05:00</span></div>
+      <div id="moves"></div>
+      <button onclick="restartGame()" style="margin-top:10px;">Restart Game</button>
+    </div>
+  </div>
+</div>
+
+<div id="customPage">
+  <h2>Customize Board & Pieces</h2>
+  <label>White cell color: <input type="color" id="whiteCellColor" value="#f0d9b5"></label>
+  <label>Black cell color: <input type="color" id="blackCellColor" value="#b58863"></label>
+  <label>White pieces color: <input type="color" id="whitePieceColor" value="#ffffff"></label>
+  <label>Black pieces color: <input type="color" id="blackPieceColor" value="#000000"></label>
+  <button onclick="applyCustomization()">Apply</button>
+</div>
+
+<script>
+// --- Chess Setup ---
+let board=[], selected=null, game={turn:"w", over:false}, moves=[];
+const boardEl=document.getElementById("board"), statusEl=document.getElementById("status"), movesEl=document.getElementById("moves");
+
+function initBoard(){
+  const initial=[
+    ["bR","bN","bB","bQ","bK","bB","bN","bR"],
+    ["bP","bP","bP","bP","bP","bP","bP","bP"],
+    ["","","","","","","",""],
+    ["","","","","","","",""],
+    ["","","","","","","",""],
+    ["","","","","","","",""],
+    ["wP","wP","wP","wP","wP","wP","wP","wP"],
+    ["wR","wN","wB","wQ","wK","wB","wN","wR"]
+  ];
+  board=initial.map(r=>r.slice()); moves=[]; game.turn="w"; game.over=false; updateStatus();
+}
+
+// --- Render Board ---
+function renderBoard(){
+  boardEl.innerHTML=""; 
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      const cell=document.createElement("div");
+      cell.className="cell "+((r+c)%2?"black":"white");
+      cell.dataset.row=r; cell.dataset.col=c;
+      cell.textContent=board[r][c]?pieceChar(board[r][c]):"";
+      cell.onclick=()=>cellClick(r,c);
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function pieceChar(p){
+  const map={"K":"♔","Q":"♕","R":"♖","B":"♗","N":"♘","P":"♙"};
+  return p[0]==="w"?map[p[1]]:map[p[1]].toLowerCase();
+}
+
+// --- Cell Click ---
+function cellClick(r,c){
+  if(game.over) return;
+  if(selected){
+    if(selected[0]===r && selected[1]===c){ selected=null; renderBoard(); return; }
+    movePiece(selected,[r,c]);
+    selected=null; renderBoard(); return;
+  }
+  if(board[r][c] && board[r][c][0]===game.turn) selected=[r,c];
+}
+
+// --- Move Logic (simple, no rules check except color) ---
+function movePiece(from,to){
+  const fr=from[0],fc=from[1],tr=to[0],tc=to[1], piece=board[fr][fc];
+  if(piece && piece[0]===game.turn){
+    // promotion check
+    if(piece[1]==="P" && (tr===0 || tr===7)){
+      choosePromotion(tr,tc,piece[0]);
+    } else board[tr][tc]=piece;
+    board[fr][fc]="";
+    addMove(from,to,piece);
+    game.turn=game.turn==="w"?"b":"w";
+    updateStatus();
+  }
+}
+
+function addMove(from,to,piece){
+  const notation=piece[1]+String.fromCharCode(97+to[1])+(8-to[0]);
+  moves.push(notation);
+  movesEl.textContent=moves.join(", ");
+}
+
+function updateStatus(){ statusEl.textContent=(game.over?"Game over":(game.turn==="w"?"White":"Black")+" to move"); }
+
+// --- Promotion ---
+function choosePromotion(r,c,color){
+  const div=document.createElement("div");
+  ["Q","R","B","N"].forEach(p=>{
+    const btn=document.createElement("button");
+    btn.className="promoteBtn"; btn.textContent=p;
+    btn.onclick=()=>{ board[r][c]=color+p; document.body.removeChild(div); };
+    div.appendChild(btn);
+  });
+  div.style.position="fixed"; div.style.top="50%"; div.style.left="50%"; div.style.transform="translate(-50%,-50%)"; div.style.background="#ccc"; div.style.padding="10px"; div.style.zIndex="100";
+  document.body.appendChild(div);
+}
+
+// --- Page Switching ---
+function showPage(id){ document.getElementById("gamePage").style.display="none"; document.getElementById("customPage").style.display="none"; document.getElementById(id).style.display="block"; }
+
+// --- Customization ---
+function applyCustomization(){
+  const wc=document.getElementById("whiteCellColor").value, bc=document.getElementById("blackCellColor").value;
+  const wp=document.getElementById("whitePieceColor").value, bp=document.getElementById("blackPieceColor").value;
+  document.querySelectorAll(".cell.white").forEach(c=>c.style.background=wc);
+  document.querySelectorAll(".cell.black").forEach(c=>c.style.background=bc);
+  document.querySelectorAll(".cell").forEach(c=>{
+    if(c.textContent>="A" && c.textContent<="Z") c.style.color=wp;
+    if(c.textContent>="a" && c.textContent<="z") c.style.color=bp;
+  });
+}
+
+// --- Timer & Restart ---
+let whiteTime=300, blackTime=300, timerInterval=null;
+
+function startTimer(){
+  let minutes=parseInt(document.getElementById("timeInput").value)||5;
+  whiteTime=blackTime=minutes*60; updateTimers();
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval=setInterval(tickTimer,1000);
+}
+
+function tickTimer(){
+  if(game.over) { clearInterval(timerInterval); return; }
+  if(game.turn==="w") whiteTime--; else blackTime--;
+  updateTimers();
+  if(whiteTime<=0 || blackTime<=0){
+    game.over=true;
+    updateStatus();
+    statusEl.textContent=(whiteTime<=0?"White":"Black")+" ran out of time!";
+    clearInterval(timerInterval);
+  }
+}
+
+function updateTimers(){
+  document.getElementById("whiteTimer").textContent=formatTime(whiteTime);
+  document.getElementById("blackTimer").textContent=formatTime(blackTime);
+}
+
+function formatTime(sec){
+  let m=Math.floor(sec/60), s=sec%60;
+  return (m<10?"0":"")+m+":"+(s<10?"0":"")+s;
+}
+
+function restartGame(){
+  initBoard(); renderBoard(); game.over=false; movesEl.textContent="";
+  whiteTime=blackTime=parseInt(document.getElementById("timeInput").value)*60||300;
+  updateTimers();
+  if(timerInterval) clearInterval(timerInterval); timerInterval=null;
+}
+
+// --- Initialize ---
+initBoard(); renderBoard();
+</script>
+
+</body>
+</html>
